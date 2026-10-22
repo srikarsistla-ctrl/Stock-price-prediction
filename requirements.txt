@@ -1,0 +1,10 @@
+# Verified working on Python 3.12.
+# The previous pins were from 2021 and cannot build on modern Python.
+Flask>=3.0
+gunicorn>=21.2
+joblib>=1.3
+numpy>=1.26
+pandas>=2.0
+scikit-learn>=1.4
+yfinance>=1.5
+# Plotly is loaded from a CDN in the template; SQLite is stdlib. No extra deps.

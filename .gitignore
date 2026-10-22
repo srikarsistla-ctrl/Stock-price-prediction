@@ -1,0 +1,27 @@
+# Python environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local secrets and settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.vscode/
+.idea/
+
+# Runtime prediction history and obsolete local backup
+predictions.db
+predictions.db-*
+model_original_backup.pkl
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db

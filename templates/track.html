@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live track record · {{ info.ticker }}</title>
+    <style>
+        :root {
+            --bg: #0b1017; --panel: #141c26; --line: #24303f;
+            --text: #e6edf5; --muted: #8595a8;
+            --up: #26c281; --down: #e05c5c; --accent: #4a9eff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.5;
+        }
+        .wrap { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+        h1 { font-size: 1.5rem; margin: 0 0 0.25rem; font-weight: 600; }
+        .sub { color: var(--muted); font-size: 0.9rem; }
+        nav { margin: 1rem 0 2rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        nav a {
+            color: var(--text); text-decoration: none; font-size: 0.85rem;
+            border: 1px solid var(--line); padding: 0.35rem 0.85rem; border-radius: 999px;
+        }
+        nav a:hover { border-color: var(--accent); color: var(--accent); }
+        .panel {
+            background: var(--panel); border: 1px solid var(--line);
+            border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+        }
+        h2 { font-size: 1rem; margin: 0 0 1rem; font-weight: 600; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; }
+        .stat .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        .stat .value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stat .note { font-size: 0.75rem; color: var(--muted); }
+        .up { color: var(--up); } .down { color: var(--down); } .pending { color: var(--muted); }
+        .scroll { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { text-align: right; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        th:first-child, td:first-child { text-align: left; }
+        th { color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .caveat { font-size: 0.83rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 0.9rem; }
+        .caveat strong { color: var(--text); }
+        .empty { color: var(--muted); text-align: center; padding: 2.5rem 1rem; }
+    </style>
+</head>
+
+<body>
+<div class="wrap">
+
+    <h1>Live track record</h1>
+    <div class="sub">
+        Every prediction this deployment has made, logged before it was shown and scored
+        automatically once the session closed. This is not the backtest — it is what the
+        model has done on days that did not exist when it was trained.
+    </div>
+
+    <nav>
+        <a href="{{ url_for('main') }}">← Dashboard</a>
+        <a href="{{ url_for('api_track') }}">JSON</a>
+    </nav>
+
+    <div class="panel">
+        <h2>Summary</h2>
+        <div class="grid">
+            <div class="stat">
+                <div class="label">Live hit rate</div>
+                <div class="value {% if track.hit_rate is not none %}{{ 'up' if track.hit_rate > info.baseline else 'down' }}{% endif %}">
+                    {{ track.hit_rate if track.hit_rate is not none else '—' }}{% if track.hit_rate is not none %}%{% endif %}
+                </div>
+                <div class="note">on {{ track.scored }} scored prediction{{ '' if track.scored == 1 else 's' }}</div>
+            </div>
+            <div class="stat">
+                <div class="label">Correct</div>
+                <div class="value">{{ track.hits }} / {{ track.scored }}</div>
+                <div class="note">resolved against real closes</div>
+            </div>
+            <div class="stat">
+                <div class="label">Awaiting outcome</div>
+                <div class="value pending">{{ track.pending }}</div>
+                <div class="note">market has not closed yet</div>
+            </div>
+            <div class="stat">
+                <div class="label">Backtest accuracy</div>
+                <div class="value">{{ info.accuracy }}%</div>
+                <div class="note">baseline {{ info.baseline }}%</div>
+            </div>
+        </div>
+        {% if track.scored < 30 %}
+        <p class="caveat" style="margin-top:1.25rem;">
+            <strong>Too few samples to conclude anything.</strong> With {{ track.scored }} scored
+            prediction{{ '' if track.scored == 1 else 's' }}, the hit rate above carries a margin of
+            error far wider than the {{ info.edge }}-point edge being tested. Roughly 400 sessions
+            are needed before a ~3-point edge is distinguishable from noise. The number is shown
+            anyway because watching it fail to converge is the point.
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <h2>Prediction log</h2>
+        {% if track.rows %}
+        <div class="scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>Signal date</th>
+                    <th>Close</th>
+                    <th>P(up)</th>
+                    <th>Predicted</th>
+                    <th>Next close</th>
+                    <th>Actual move</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in track.rows %}
+                <tr>
+                    <td>{{ r.signal_date }}</td>
+                    <td>{{ r.close_at_signal | round(2) }}</td>
+                    <td>{{ (r.proba_up * 100) | round(1) }}%</td>
+                    <td class="{{ 'up' if r.pred_direction else 'down' }}">
+                        {{ 'UP' if r.pred_direction else 'DOWN' }}
+                    </td>
+                    <td>{{ r.actual_close | round(2) if r.actual_close is not none else '—' }}</td>
+                    {% if r.actual_return_pct is not none %}
+                    <td class="{{ 'up' if r.actual_return_pct >= 0 else 'down' }}">
+                        {{ '+' if r.actual_return_pct >= 0 else '' }}{{ r.actual_return_pct | round(2) }}%
+                    </td>
+                    {% else %}
+                    <td class="pending">—</td>
+                    {% endif %}
+                    {% if r.correct is none %}
+                    <td class="pending">pending</td>
+                    {% elif r.correct == 1 %}
+                    <td class="up">hit</td>
+                    {% else %}
+                    <td class="down">miss</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            No predictions logged yet. Open the
+            <a href="{{ url_for('main') }}" style="color:var(--accent);">dashboard</a>
+            to generate one.
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <p class="caveat">
+            <strong>Why this page exists.</strong> A backtest can always be tuned until it looks good.
+            A forward log cannot — the prediction is written to SQLite before it is rendered, keyed by
+            session date so a page refresh cannot create a second attempt, and the outcome is filled
+            in from real market data. If the model is worse than the backtest claims, this table is
+            where it shows up.
+        </p>
+    </div>
+
+</div>
+</body>
+</html>

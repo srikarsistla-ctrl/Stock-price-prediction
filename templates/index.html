@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ info.ticker }} · Next-Session Direction Model</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+    <style>
+        :root {
+            --bg: #0b1017;
+            --panel: #141c26;
+            --line: #24303f;
+            --text: #e6edf5;
+            --muted: #8595a8;
+            --up: #26c281;
+            --down: #e05c5c;
+            --accent: #4a9eff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.5;
+        }
+        .wrap { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+        header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem; margin-bottom: 0.25rem; }
+        h1 { font-size: 1.5rem; margin: 0; font-weight: 600; }
+        .sub { color: var(--muted); font-size: 0.9rem; }
+        nav { margin: 1rem 0 2rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        nav a {
+            color: var(--text); text-decoration: none; font-size: 0.85rem;
+            border: 1px solid var(--line); padding: 0.35rem 0.85rem; border-radius: 999px;
+        }
+        nav a:hover { border-color: var(--accent); color: var(--accent); }
+        .panel {
+            background: var(--panel); border: 1px solid var(--line);
+            border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+        }
+        h2 { font-size: 1rem; margin: 0 0 1rem; font-weight: 600; letter-spacing: 0.01em; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+        .stat .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        .stat .value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stat .note { font-size: 0.75rem; color: var(--muted); }
+        .up { color: var(--up); } .down { color: var(--down); }
+        .signal { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; }
+        .signal .badge {
+            font-size: 2rem; font-weight: 700; padding: 0.6rem 1.5rem;
+            border-radius: 8px; border: 1px solid currentColor;
+        }
+        .chart { width: 100%; height: 340px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { text-align: right; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+        th:first-child, td:first-child { text-align: left; }
+        th { color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .caveat { font-size: 0.83rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 0.9rem; }
+        .caveat strong { color: var(--text); }
+        .err { border-color: var(--down); color: var(--down); }
+        .tag { font-size: 0.7rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0.1rem 0.45rem; }
+        .scroll { overflow-x: auto; }
+    </style>
+</head>
+
+<body>
+<div class="wrap">
+
+    <header>
+        <h1>{{ info.ticker }} — next-session direction</h1>
+        <span class="tag">{{ info.model_name }}</span>
+        <span class="tag">{{ info.n_features }} features</span>
+    </header>
+    <div class="sub">
+        Predicts whether the <strong>next</strong> trading session closes higher than the last
+        completed one. Not a price forecast — see the caveats at the bottom.
+    </div>
+
+    <nav>
+        <a href="{{ url_for('main') }}">Dashboard</a>
+        <a href="{{ url_for('track') }}">Live track record</a>
+        <a href="{{ url_for('main') }}?refresh=1">Force refresh data</a>
+    </nav>
+
+    {% if error %}
+    <div class="panel err"><strong>{{ error }}</strong></div>
+    {% endif %}
+
+    {% if prediction %}
+    <div class="panel">
+        <h2>Live signal</h2>
+        <div class="signal">
+            <div class="badge {{ 'up' if prediction.direction else 'down' }}">
+                {{ prediction.direction_label }}
+            </div>
+            <div class="grid" style="flex:1;">
+                <div class="stat">
+                    <div class="label">P(up)</div>
+                    <div class="value">{{ prediction.proba_up }}%</div>
+                    <div class="note">{{ prediction.confidence }}% from a coin flip</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Last close</div>
+                    <div class="value">{{ prediction.close }}</div>
+                    <div class="note">session of {{ prediction.signal_date }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Predicted move</div>
+                    <div class="value {{ 'up' if prediction.pred_return_pct >= 0 else 'down' }}">
+                        {{ '+' if prediction.pred_return_pct >= 0 else '' }}{{ prediction.pred_return_pct }}%
+                    </div>
+                    <div class="note">implies ~{{ prediction.implied_close }}</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Data source</div>
+                    <div class="value" style="font-size:1rem;">{{ prediction.source }}</div>
+                    <div class="note">OHLCV auto-fetched</div>
+                </div>
+            </div>
+        </div>
+        <p class="caveat" style="margin-top:1.25rem;">
+            This prediction was written to the log <strong>before</strong> it was shown to you.
+            Once the market closes on the next session it gets scored automatically —
+            no cherry-picking. See <a href="{{ url_for('track') }}" style="color:var(--accent);">the track record</a>.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+        <h2>Held-out test performance</h2>
+        <div class="grid">
+            <div class="stat">
+                <div class="label">Direction accuracy</div>
+                <div class="value {{ 'up' if info.edge > 0 else 'down' }}">{{ info.accuracy }}%</div>
+                <div class="note">{{ info.test_start }} → {{ info.test_end }}</div>
+            </div>
+            <div class="stat">
+                <div class="label">Always-up baseline</div>
+                <div class="value">{{ info.baseline }}%</div>
+                <div class="note">the bar to beat</div>
+            </div>
+            <div class="stat">
+                <div class="label">Edge</div>
+                <div class="value {{ 'up' if info.edge > 0 else 'down' }}">
+                    {{ '+' if info.edge > 0 else '' }}{{ info.edge }} pts
+                </div>
+                <div class="note">accuracy − baseline</div>
+            </div>
+            <div class="stat">
+                <div class="label">ROC AUC</div>
+                <div class="value">{{ info.auc }}</div>
+                <div class="note">0.5 = no signal</div>
+            </div>
+        </div>
+        <p class="caveat" style="margin-top:1.25rem;">
+            The model was chosen on a <strong>validation</strong> block ending {{ info.train_end }}-ish
+            and scored once on the test block above, which it had never seen.
+            Picking the winner by test score would have inflated this number.
+        </p>
+    </div>
+
+    {% if chart %}
+    <div class="panel">
+        <h2>Predicted vs actual close — last {{ chart.dates|length }} out-of-sample sessions</h2>
+        <div id="priceChart" class="chart"></div>
+        <p class="caveat">
+            Direction called correctly on {{ chart.hit_rate }}% of these {{ chart.dates|length }} days.
+            The predicted line tracks the actual line closely because both are anchored to the
+            previous close — <strong>that closeness is not skill</strong>, which is exactly why the
+            direction metric and the backtest below are the honest scoreboard.
+        </p>
+    </div>
+    {% endif %}
+
+    {% if backtest %}
+    <div class="panel">
+        <h2>Backtest — does the edge survive transaction costs?</h2>
+        <div id="equityChart" class="chart"></div>
+        <div class="grid" style="margin-top:1.25rem;">
+            <div class="stat">
+                <div class="label">Strategy, net</div>
+                <div class="value {{ 'up' if backtest.strategy.total_return_pct >= 0 else 'down' }}">
+                    {{ backtest.strategy.total_return_pct | round(1) }}%
+                </div>
+                <div class="note">Sharpe {{ backtest.strategy.sharpe | round(2) }}</div>
+            </div>
+            <div class="stat">
+                <div class="label">Buy &amp; hold</div>
+                <div class="value {{ 'up' if backtest.buyhold.total_return_pct >= 0 else 'down' }}">
+                    {{ backtest.buyhold.total_return_pct | round(1) }}%
+                </div>
+                <div class="note">Sharpe {{ backtest.buyhold.sharpe | round(2) }}</div>
+            </div>
+            <div class="stat">
+                <div class="label">Cost drag</div>
+                <div class="value down">−{{ backtest.cost_drag_pct }} pts</div>
+                <div class="note">{{ backtest.strategy.n_trades }} trades @ {{ backtest.assumptions.cost_bps_per_side }} bps/side</div>
+            </div>
+            <div class="stat">
+                <div class="label">Max drawdown</div>
+                <div class="value">{{ backtest.strategy.max_drawdown_pct | round(1) }}%</div>
+                <div class="note">vs {{ backtest.buyhold.max_drawdown_pct | round(1) }}% buy &amp; hold</div>
+            </div>
+            <div class="stat">
+                <div class="label">Time in market</div>
+                <div class="value">{{ backtest.strategy.exposure_pct | round(0) }}%</div>
+                <div class="note">long/flat, no shorting</div>
+            </div>
+        </div>
+
+        <h2 style="margin-top:2rem;">Sensitivity — total return %, by signal threshold and cost</h2>
+        <div class="scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>P(up) threshold</th>
+                    {% for c in backtest.sensitivity[0].by_cost.keys() %}
+                    <th>{{ c | float | round(0) | int }} bps/side</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in backtest.sensitivity %}
+                <tr>
+                    <td>&gt; {{ row.threshold }}</td>
+                    {% for c, v in row.by_cost.items() %}
+                    <td class="{{ 'up' if v >= 0 else 'down' }}">{{ v | round(2) }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                <tr>
+                    <td><strong>buy &amp; hold</strong></td>
+                    <td colspan="{{ backtest.sensitivity[0].by_cost|length }}"
+                        class="{{ 'up' if backtest.buyhold.total_return_pct >= 0 else 'down' }}"
+                        style="text-align:left;">
+                        {{ backtest.buyhold.total_return_pct | round(2) }} (no trading)
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+        <p class="caveat" style="margin-top:1.25rem;">
+            <strong>The headline finding.</strong> A {{ info.accuracy }}% direction accuracy is a real
+            edge over the {{ info.baseline }}% baseline, but the signal flips often enough to trade
+            {{ backtest.strategy.n_trades }} times in {{ backtest.window.days }} sessions. At a realistic
+            {{ backtest.assumptions.cost_bps_per_side }} bps per side that costs
+            {{ backtest.cost_drag_pct }} percentage points and erases the advantage. Reading left to
+            right in the table above shows how fast the result decays as costs rise —
+            a small classification edge is not automatically a tradeable one.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+        <h2>How to read this</h2>
+        <p class="caveat">
+            Daily equity direction is close to unpredictable. This project is built to
+            <strong>measure</strong> that rather than hide it: stationary features only, a chronological
+            train/validation/test split, a baseline that is genuinely hard to beat, costs charged on
+            every trade, and every live prediction logged before it is shown.
+            It is a modelling and evaluation exercise, <strong>not investment advice</strong>.
+        </p>
+        <p class="sub" style="margin-top:1rem;">
+            {{ info.model_name }} · {{ info.n_features }} features · trained {{ info.trained_at }}
+        </p>
+    </div>
+
+</div>
+
+<script>
+    const dark = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#8595a8', size: 11 },
+        margin: { l: 55, r: 20, t: 10, b: 40 },
+        xaxis: { gridcolor: '#24303f', zerolinecolor: '#24303f' },
+        yaxis: { gridcolor: '#24303f', zerolinecolor: '#24303f' },
+        legend: { orientation: 'h', y: 1.12, x: 0 },
+        hovermode: 'x unified'
+    };
+    const cfg = { displayModeBar: false, responsive: true };
+
+    {% if chart %}
+    Plotly.newPlot('priceChart', [
+        {
+            x: {{ chart.dates | tojson }},
+            y: {{ chart.actual_close | tojson }},
+            name: 'Actual close', type: 'scatter', mode: 'lines',
+            line: { color: '#4a9eff', width: 2 }
+        },
+        {
+            x: {{ chart.dates | tojson }},
+            y: {{ chart.predicted_close | tojson }},
+            name: 'Predicted close', type: 'scatter', mode: 'lines',
+            line: { color: '#26c281', width: 1.5, dash: 'dot' }
+        }
+    ], Object.assign({}, dark, { yaxis: Object.assign({}, dark.yaxis, { title: 'Price (INR)' }) }), cfg);
+    {% endif %}
+
+    {% if backtest %}
+    Plotly.newPlot('equityChart', [
+        {
+            x: {{ backtest.dates | tojson }},
+            y: {{ backtest.buyhold_equity | tojson }},
+            name: 'Buy & hold', type: 'scatter', mode: 'lines',
+            line: { color: '#8595a8', width: 2 }
+        },
+        {
+            x: {{ backtest.dates | tojson }},
+            y: {{ backtest.gross_equity | tojson }},
+            name: 'Strategy (gross)', type: 'scatter', mode: 'lines',
+            line: { color: '#26c281', width: 1.5, dash: 'dot' }
+        },
+        {
+            x: {{ backtest.dates | tojson }},
+            y: {{ backtest.strategy_equity | tojson }},
+            name: 'Strategy (net of costs)', type: 'scatter', mode: 'lines',
+            line: { color: '#e05c5c', width: 2 }
+        }
+    ], Object.assign({}, dark, {
+        yaxis: Object.assign({}, dark.yaxis, { title: 'Growth of 1' })
+    }), cfg);
+    {% endif %}
+</script>
+
+</body>
+</html>

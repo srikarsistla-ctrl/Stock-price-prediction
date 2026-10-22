@@ -1,0 +1,60 @@
+{
+  "target": "next_day_direction",
+  "baseline_always_up": {
+    "validation": 49.02654867256637,
+    "test": 49.11660777385159
+  },
+  "validation": [
+    {
+      "accuracy": 52.92035398230088,
+      "f1": 61.67146974063401,
+      "auc": 0.5583383473726434,
+      "name": "LogisticRegression"
+    },
+    {
+      "accuracy": 53.27433628318584,
+      "f1": 61.51603498542274,
+      "auc": 0.5562575210589651,
+      "name": "LogisticRegression_weak_reg"
+    },
+    {
+      "accuracy": 50.61946902654867,
+      "f1": 62.04081632653061,
+      "auc": 0.5277025671881268,
+      "name": "RandomForest"
+    },
+    {
+      "accuracy": 50.442477876106196,
+      "f1": 59.42028985507246,
+      "auc": 0.5031964500601684,
+      "name": "GradientBoosting"
+    }
+  ],
+  "selected": "LogisticRegression_weak_reg",
+  "test": {
+    "accuracy": 53.003533568904594,
+    "f1": 59.45121951219512,
+    "auc": 0.5460631494804156
+  },
+  "regression": {
+    "baseline_mae_pct": 1.207308505403279,
+    "models": [
+      {
+        "name": "Ridge",
+        "mae_pct": 1.2048544332020859,
+        "rmse_pct": 1.6970189777143845
+      },
+      {
+        "name": "RandomForestReg",
+        "mae_pct": 1.2275613103617844,
+        "rmse_pct": 1.7065093240362164
+      }
+    ]
+  },
+  "split": {
+    "train_end": "2022-01-25",
+    "val_end": "2024-05-14",
+    "test_start": "2024-05-15",
+    "test_end": "2026-08-27"
+  }
+}
